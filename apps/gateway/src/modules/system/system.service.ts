@@ -3,15 +3,12 @@ import { Injectable } from '@nestjs/common';
 import { ApplicationService } from '../../common/application/application.service';
 
 @Injectable()
-export class HealthService {
+export class SystemService {
   constructor(
     private readonly applicationService: ApplicationService,
   ) {}
 
-  getHealth() {
-    return {
-      status: 'ok',
-      ...this.applicationService.getHealthInfo(),
-    };
+  getInfo() {
+    return this.applicationService.getInfo();
   }
 }
