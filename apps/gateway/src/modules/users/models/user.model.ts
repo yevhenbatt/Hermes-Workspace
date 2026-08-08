@@ -7,6 +7,7 @@ export class User {
   username!: string;
   passwordHash!: string;
   isActive = true;
+  isPlatformAdmin = false;
   createdAt = new Date();
   updatedAt = new Date();
 
@@ -25,6 +26,7 @@ export const UserSchema = new EntitySchema<User>({
     username: { type: 'string', length: 64, unique: true },
     passwordHash: { type: 'string', fieldName: 'password_hash', length: 255, hidden: true },
     isActive: { type: 'boolean', fieldName: 'is_active', default: true },
+    isPlatformAdmin: { type: 'boolean', fieldName: 'is_platform_admin', default: false },
     createdAt: { type: 'Date', fieldName: 'created_at', onCreate: () => new Date() },
     updatedAt: {
       type: 'Date',

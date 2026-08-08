@@ -12,6 +12,7 @@ services:
 
     environment:
       DATABASE_ENABLED: "true"
+      REGISTRATION_MODE: "invite-only"
 
     networks:
       - hermes-private

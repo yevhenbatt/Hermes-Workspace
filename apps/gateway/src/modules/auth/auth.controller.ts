@@ -13,6 +13,7 @@ import {
   ApiBearerAuth,
   ApiConflictResponse,
   ApiCreatedResponse,
+  ApiForbiddenResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -22,12 +23,24 @@ import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { LoginResponseDto } from './dto/login-response.dto';
 import { RegisterDto } from './dto/register.dto';
+import { CreateInviteDto } from './dto/create-invite.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @Post('invites')
+  @Version('1')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'Create a one-time platform invitation' })
+  @ApiCreatedResponse({ description: 'Copy the returned token and send it only to the intended user.' })
+  @ApiForbiddenResponse({ description: 'Platform administrator access is required.' })
+  createInvite(@Req() req: any, @Body() dto: CreateInviteDto) {
+    return this.authService.createInvite(req.user.userId, dto);
+  }
 
   @Post('register')
   @Version('1')

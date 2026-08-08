@@ -10,6 +10,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
 import { SystemModule } from './modules/system/system.module';
 import { UsersModule } from './modules/users/users.module';
+import { WorkspaceModule } from './modules/workspace/workspace.module';
 
 const databaseEnabled = process.env.DATABASE_ENABLED === 'true';
 
@@ -27,6 +28,7 @@ const databaseEnabled = process.env.DATABASE_ENABLED === 'true';
     SystemModule,
     AuthModule,
     UsersModule,
+    ...(databaseEnabled ? [WorkspaceModule] : []),
   ],
 })
 export class AppModule {}

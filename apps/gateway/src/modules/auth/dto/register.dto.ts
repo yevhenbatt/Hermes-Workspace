@@ -1,6 +1,6 @@
 import { Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 export class RegisterDto {
   @ApiProperty({ example: 'alex' })
@@ -16,7 +16,13 @@ export class RegisterDto {
   @ApiProperty({ example: 'Use a long, unique password' })
   @IsString()
   @IsNotEmpty()
-  @MinLength(12)
+  @MinLength(8)
   @MaxLength(128)
   password!: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(32)
+  @MaxLength(128)
+  inviteToken?: string;
 }
