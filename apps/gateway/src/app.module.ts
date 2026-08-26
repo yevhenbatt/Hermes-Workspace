@@ -6,6 +6,7 @@ import { ApplicationModule } from './common/application/application.module';
 import { AppConfigModule } from './config/config.module';
 import configuration from './config/app.config';
 import { DatabaseModule } from './database/database.module';
+import { AgentModule } from './modules/agent/agent.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
 import { SystemModule } from './modules/system/system.module';
@@ -27,6 +28,7 @@ const databaseEnabled = process.env.DATABASE_ENABLED === 'true';
     HealthModule,
     SystemModule,
     AuthModule,
+    AgentModule,
     UsersModule,
     ...(databaseEnabled ? [WorkspaceModule] : []),
   ],
