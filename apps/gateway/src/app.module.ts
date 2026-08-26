@@ -9,6 +9,7 @@ import { DatabaseModule } from './database/database.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { AgentModule } from './modules/agent/agent.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { DesktopModule } from './modules/desktop/desktop.module';
 import { HealthModule } from './modules/health/health.module';
 import { OffboardingModule } from './modules/offboarding/offboarding.module';
 import { SystemModule } from './modules/system/system.module';
@@ -29,7 +30,7 @@ const databaseEnabled = process.env.DATABASE_ENABLED === 'true';
     AuthModule,
     AgentModule,
     UsersModule,
-    ...(databaseEnabled ? [WorkspaceModule, AdminModule, OffboardingModule] : []),
+    ...(databaseEnabled ? [WorkspaceModule, AdminModule, OffboardingModule, DesktopModule] : []),
   ],
 })
 export class AppModule {}
