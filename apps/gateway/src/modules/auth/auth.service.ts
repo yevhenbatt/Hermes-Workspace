@@ -22,31 +22,17 @@ export class AuthService {
 
   async login(loginDto: LoginDto): Promise<LoginResponseDto> {
     const user = await this.usersService.findByUsername(loginDto.username);
-
-    if (!user) {
-      throw new UnauthorizedException('Invalid username or password');
-    }
-
-    const isPasswordValid = await this.passwordService.verify(
-      user.passwordHash,
-      loginDto.password,
-    );
-
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid username or password');
-    }
-
+    if (!user?.isActive) throw new UnauthorizedException('Invalid username or password');
+    const isPasswordValid = await this.passwordService.verify(user.passwordHash, loginDto.password);
+    if (!isPasswordValid) throw new UnauthorizedException('Invalid username or password');
     return this.createLoginResponse(user);
   }
 
   async register(registerDto: RegisterDto): Promise<LoginResponseDto> {
-    if (process.env.REGISTRATION_MODE === 'invite-only') {
-      await this.consumeInvite(registerDto);
-    }
+    if (process.env.REGISTRATION_MODE === 'invite-only') await this.consumeInvite(registerDto);
     const passwordHash = await this.passwordService.hash(registerDto.password);
     const user = await this.usersService.create(registerDto.username, passwordHash);
     await this.createPersonalWorkspace(user);
-
     return this.createLoginResponse(user);
   }
 
@@ -79,10 +65,6 @@ export class AuthService {
   private hashToken(token: string) { return createHash('sha256').update(token).digest('hex'); }
 
   private createLoginResponse(user: User): LoginResponseDto {
-    return {
-      accessToken: this.jwtService.sign({ sub: user.id, username: user.username }),
-      refreshToken: 'dummy-refresh-token',
-      expiresIn: 3600,
-    };
+    return { accessToken: this.jwtService.sign({ sub: user.id, username: user.username }), refreshToken: 'dummy-refresh-token', expiresIn: 3600 };
   }
 }

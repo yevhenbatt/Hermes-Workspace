@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { EntitySchema } from '@mikro-orm/core';
 
 export class User {
-  id = randomUUID();
+  id: string = randomUUID();
   username!: string;
   passwordHash!: string;
   isActive = true;
@@ -29,10 +29,8 @@ export const UserSchema = new EntitySchema<User>({
     isPlatformAdmin: { type: 'boolean', fieldName: 'is_platform_admin', default: false },
     createdAt: { type: 'Date', fieldName: 'created_at', onCreate: () => new Date() },
     updatedAt: {
-      type: 'Date',
-      fieldName: 'updated_at',
-      onCreate: () => new Date(),
-      onUpdate: () => new Date(),
+      type: 'Date', fieldName: 'updated_at',
+      onCreate: () => new Date(), onUpdate: () => new Date(),
     },
   },
 });

@@ -6,6 +6,7 @@ import { ApplicationModule } from './common/application/application.module';
 import { AppConfigModule } from './config/config.module';
 import configuration from './config/app.config';
 import { DatabaseModule } from './database/database.module';
+import { AdminModule } from './modules/admin/admin.module';
 import { AgentModule } from './modules/agent/agent.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
@@ -17,10 +18,7 @@ const databaseEnabled = process.env.DATABASE_ENABLED === 'true';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-      load: [configuration],
-    }),
+    ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
     LoggerModule,
     AppConfigModule,
     ApplicationModule,
@@ -30,7 +28,7 @@ const databaseEnabled = process.env.DATABASE_ENABLED === 'true';
     AuthModule,
     AgentModule,
     UsersModule,
-    ...(databaseEnabled ? [WorkspaceModule] : []),
+    ...(databaseEnabled ? [WorkspaceModule, AdminModule] : []),
   ],
 })
 export class AppModule {}

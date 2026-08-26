@@ -19,24 +19,29 @@ export class UserRepository {
     private readonly repository?: EntityRepository<User>,
   ) {}
 
+  async findById(id: string): Promise<User | undefined> {
+    if (this.repository) {
+      const user = await this.repository.findOne({ id });
+      return user ?? undefined;
+    }
+    return this.developmentUsers.find((user) => user.id === id);
+  }
+
   async findByUsername(username: string): Promise<User | undefined> {
     if (this.repository) {
       const user = await this.repository.findOne({ username });
       return user ?? undefined;
     }
-
     return this.developmentUsers.find((user) => user.username === username);
   }
 
   async create(username: string, passwordHash: string): Promise<User> {
     const user = new User(username, passwordHash);
-
     if (this.repository) {
       const entityManager = this.repository.getEntityManager();
       await entityManager.persist(user).flush();
       return user;
     }
-
     this.developmentUsers.push(user);
     return user;
   }
