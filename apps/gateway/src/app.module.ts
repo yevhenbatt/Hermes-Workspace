@@ -10,6 +10,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { AgentModule } from './modules/agent/agent.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
+import { OffboardingModule } from './modules/offboarding/offboarding.module';
 import { SystemModule } from './modules/system/system.module';
 import { UsersModule } from './modules/users/users.module';
 import { WorkspaceModule } from './modules/workspace/workspace.module';
@@ -28,7 +29,7 @@ const databaseEnabled = process.env.DATABASE_ENABLED === 'true';
     AuthModule,
     AgentModule,
     UsersModule,
-    ...(databaseEnabled ? [WorkspaceModule, AdminModule] : []),
+    ...(databaseEnabled ? [WorkspaceModule, AdminModule, OffboardingModule] : []),
   ],
 })
 export class AppModule {}
