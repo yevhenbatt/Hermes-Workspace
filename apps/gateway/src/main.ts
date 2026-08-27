@@ -13,6 +13,16 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  app.enableCors({
+    origin: [
+      'http://tauri.localhost',
+      'tauri://localhost',
+      'http://localhost:1420',
+    ],
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  });
+
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Hermes Workspace Gateway API')
     .setDescription('API documentation for the Hermes Workspace Gateway')
