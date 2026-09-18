@@ -8,6 +8,7 @@ import configuration from './config/app.config';
 import { DatabaseModule } from './database/database.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { AgentModule } from './modules/agent/agent.module';
+import { AgentTasksModule } from './modules/agent-tasks/agent-tasks.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { DesktopModule } from './modules/desktop/desktop.module';
 import { HealthModule } from './modules/health/health.module';
@@ -31,7 +32,16 @@ const databaseEnabled = process.env.DATABASE_ENABLED === 'true';
     AuthModule,
     AgentModule,
     UsersModule,
-    ...(databaseEnabled ? [WorkspaceModule, AdminModule, OffboardingModule, DesktopModule, LocalMaterialsModule] : []),
+    ...(databaseEnabled
+      ? [
+          WorkspaceModule,
+          AdminModule,
+          OffboardingModule,
+          DesktopModule,
+          LocalMaterialsModule,
+          AgentTasksModule,
+        ]
+      : []),
   ],
 })
 export class AppModule {}
