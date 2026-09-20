@@ -57,4 +57,51 @@ describe('AgentService', () => {
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it('accepts the internal Hermes Agent health contract', async () => {
+    process.env.HERMES_AGENT_BASE_URL = 'http://hermes-agent:8642';
+    const fetchMock = jest.fn(
+      async () =>
+        new Response(JSON.stringify({ status: 'ok', version: '0.19.0' }), {
+          status: 200,
+        }),
+    );
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const service = new AgentService();
+
+    await expect(service.getHealth()).resolves.toEqual({
+      available: true,
+      version: '0.19.0',
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://hermes-agent:8642/health',
+      expect.any(Object),
+    );
+  });
+
+  it('falls back to the legacy Hermes Agent health endpoint', async () => {
+    process.env.HERMES_AGENT_BASE_URL = 'http://hermes-agent:9119';
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ ok: true, version: '0.19.0' }), {
+          status: 200,
+        }),
+      );
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const service = new AgentService();
+
+    await expect(service.getHealth()).resolves.toEqual({
+      available: true,
+      version: '0.19.0',
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'http://hermes-agent:9119/api/health',
+      expect.any(Object),
+    );
+  });
 });

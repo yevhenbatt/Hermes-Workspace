@@ -2,6 +2,7 @@ import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 
 type AgentHealthResponse = {
   ok?: unknown;
+  status?: unknown;
   version?: unknown;
 };
 
@@ -32,18 +33,10 @@ export class AgentService {
     }
 
     try {
-      const response = await fetch(`${this.baseUrl}/api/health`, {
-        signal: AbortSignal.timeout(5_000),
-      });
-
-      if (!response.ok) {
-        throw new Error(`unexpected status ${response.status}`);
-      }
-
-      const payload = (await response.json()) as AgentHealthResponse;
+      const payload = await this.requestHealth();
 
       return {
-        available: payload.ok === true,
+        available: payload.ok === true || payload.status === 'ok',
         version:
           typeof payload.version === 'string' ? payload.version : undefined,
       };
@@ -143,5 +136,28 @@ export class AgentService {
 
   private isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
+  }
+
+  private async requestHealth(): Promise<AgentHealthResponse> {
+    const endpoints = ['/health', '/api/health'];
+
+    for (const [index, endpoint] of endpoints.entries()) {
+      const response = await fetch(`${this.baseUrl}${endpoint}`, {
+        signal: AbortSignal.timeout(5_000),
+      });
+
+      if (response.ok) {
+        return (await response.json()) as AgentHealthResponse;
+      }
+
+      const canTryLegacyEndpoint =
+        response.status === 404 && index < endpoints.length - 1;
+
+      if (!canTryLegacyEndpoint) {
+        throw new Error(`unexpected status ${response.status}`);
+      }
+    }
+
+    throw new Error('health endpoint is unavailable');
   }
 }
