@@ -12,6 +12,9 @@ export class CreateAgentTaskDto {
   @IsUUID()
   projectId?: string;
 
+  @IsUUID()
+  providerConnectionId!: string;
+
   @IsString()
   @Length(1, 12_000)
   input!: string;

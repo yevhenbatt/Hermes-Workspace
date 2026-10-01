@@ -9,6 +9,11 @@ import { MikroORM } from '@mikro-orm/postgresql';
 import { randomUUID } from 'node:crypto';
 
 import { AgentRun, AgentService } from '../agent/agent.service';
+import { ProviderConnectionsService } from '../provider-connections/provider-connections.service';
+import {
+  SwarmClawExecution,
+  SwarmClawService,
+} from '../swarmclaw/swarmclaw.service';
 import { CreateAgentTaskDto } from './dto/create-agent-task.dto';
 import { ListAgentTasksDto } from './dto/list-agent-tasks.dto';
 
@@ -21,6 +26,7 @@ type AgentTaskStatus =
   | 'completed'
   | 'failed'
   | 'cancelled';
+type ExecutorType = 'hermes_agent' | 'swarmclaw';
 
 export interface AgentTaskRecord {
   id: string;
@@ -29,6 +35,8 @@ export interface AgentTaskRecord {
   projectId: string | null;
   createdByUserId: string;
   agentRunId: string | null;
+  executorType: ExecutorType;
+  providerConnectionId: string | null;
   status: AgentTaskStatus;
   input: string;
   output: string | null;
@@ -52,6 +60,8 @@ export class AgentTasksService {
   constructor(
     private readonly orm: MikroORM,
     private readonly agentService: AgentService,
+    private readonly providerConnectionsService: ProviderConnectionsService,
+    private readonly swarmClawService: SwarmClawService,
   ) {}
 
   async createTask(userId: string, dto: CreateAgentTaskDto) {
@@ -59,17 +69,30 @@ export class AgentTasksService {
     const taskId = randomUUID();
     const instructions = this.buildInstructions(context);
     const connection = this.orm.em.getConnection();
+    const providerConnection =
+      await this.providerConnectionsService.requireExecutionConnection(
+        userId,
+        dto.providerConnectionId,
+        context.organizationId,
+        context.workspaceId,
+      );
+    if (providerConnection.provider !== 'codex') {
+      throw new BadRequestException(
+        'The selected provider connection is not supported by SwarmClaw yet',
+      );
+    }
 
     await connection.execute(
       `insert into workspace.agent_tasks
-       (id, organization_id, workspace_id, project_id, created_by_user_id, status, input)
-       values (?, ?, ?, ?, ?, 'queued', ?)`,
+       (id, organization_id, workspace_id, project_id, created_by_user_id, executor_type, provider_connection_id, status, input)
+       values (?, ?, ?, ?, ?, 'swarmclaw', ?, 'queued', ?)`,
       [
         taskId,
         context.organizationId,
         context.workspaceId,
         context.projectId,
         userId,
+        providerConnection.id,
         dto.input,
       ],
     );
@@ -81,15 +104,24 @@ export class AgentTasksService {
       {
         workspaceId: context.workspaceId,
         projectId: context.projectId,
+        executorType: 'swarmclaw',
+        providerConnectionId: providerConnection.id,
+        provider: providerConnection.provider,
       },
     );
 
     try {
-      const run = await this.agentService.startRun(
-        dto.input,
+      const run = await this.swarmClawService.startExecution({
+        gatewayTaskId: taskId,
+        providerConnectionId: providerConnection.id,
+        organizationId: context.organizationId,
+        workspaceId: context.workspaceId,
+        projectId: context.projectId,
+        userId,
+        title: `Workspace task ${taskId}`,
+        input: dto.input,
         instructions,
-        `gateway-task-${taskId}`,
-      );
+      });
       const status = this.toTaskStatus(run.status);
       await this.updateFromRun(taskId, run, status);
       await this.recordAudit(
@@ -98,8 +130,10 @@ export class AgentTasksService {
         'agent.task_started',
         taskId,
         {
-          agentRunId: run.runId,
+          agentRunId: this.runId(run),
           status,
+          executorType: 'swarmclaw',
+          providerConnectionId: providerConnection.id,
         },
       );
       return this.requireTask(taskId);
@@ -107,7 +141,7 @@ export class AgentTasksService {
       const message =
         error instanceof Error
           ? error.message
-          : 'Hermes Agent task API is unavailable';
+          : 'The selected task executor is unavailable';
       await connection.execute(
         `update workspace.agent_tasks
          set status = 'failed', error = ?, completed_at = current_timestamp, updated_at = current_timestamp
@@ -119,7 +153,10 @@ export class AgentTasksService {
         userId,
         'agent.task_failed_to_start',
         taskId,
-        {},
+        {
+          executorType: 'swarmclaw',
+          providerConnectionId: providerConnection.id,
+        },
       );
       throw error;
     }
@@ -129,7 +166,8 @@ export class AgentTasksService {
     await this.requireContext(userId, dto, false);
     return this.query<AgentTaskRecord>(
       `select id, organization_id as "organizationId", workspace_id as "workspaceId", project_id as "projectId",
-              created_by_user_id as "createdByUserId", agent_run_id as "agentRunId", status, input,
+              created_by_user_id as "createdByUserId", agent_run_id as "agentRunId", executor_type as "executorType",
+              provider_connection_id as "providerConnectionId", status, input,
               output, error, usage, created_at as "createdAt", updated_at as "updatedAt", completed_at as "completedAt"
        from workspace.agent_tasks
        where organization_id = ?
@@ -155,7 +193,7 @@ export class AgentTasksService {
     }
 
     try {
-      const run = await this.agentService.getRun(task.agentRunId);
+      const run = await this.getExecutorRun(task);
       const status = this.toTaskStatus(run.status);
       if (this.shouldPersistRun(task, run, status)) {
         await this.updateFromRun(taskId, run, status);
@@ -166,7 +204,8 @@ export class AgentTasksService {
             `agent.task_${status}`,
             taskId,
             {
-              agentRunId: run.runId,
+              agentRunId: this.runId(run),
+              executorType: task.executorType,
             },
           );
         }
@@ -197,11 +236,11 @@ export class AgentTasksService {
     }
     if (!task.agentRunId) {
       throw new BadRequestException(
-        'This task was not accepted by Hermes Agent',
+        'This task was not accepted by an executor',
       );
     }
 
-    const run = await this.agentService.stopRun(task.agentRunId);
+    const run = await this.stopExecutorRun(task);
     const status = this.toTaskStatus(run.status);
     await this.updateFromRun(taskId, run, status);
     await this.recordAudit(
@@ -210,8 +249,9 @@ export class AgentTasksService {
       'agent.task_stop_requested',
       taskId,
       {
-        agentRunId: run.runId,
+        agentRunId: this.runId(run),
         status,
+        executorType: task.executorType,
       },
     );
     return this.requireTask(taskId);
@@ -304,7 +344,8 @@ export class AgentTasksService {
   private async requireTask(taskId: string): Promise<AgentTaskRecord> {
     const [task] = await this.query<AgentTaskRecord>(
       `select id, organization_id as "organizationId", workspace_id as "workspaceId", project_id as "projectId",
-              created_by_user_id as "createdByUserId", agent_run_id as "agentRunId", status, input,
+              created_by_user_id as "createdByUserId", agent_run_id as "agentRunId", executor_type as "executorType",
+              provider_connection_id as "providerConnectionId", status, input,
               output, error, usage, created_at as "createdAt", updated_at as "updatedAt", completed_at as "completedAt"
        from workspace.agent_tasks where id = ?`,
       [taskId],
@@ -317,7 +358,7 @@ export class AgentTasksService {
 
   private async updateFromRun(
     taskId: string,
-    run: AgentRun,
+    run: AgentRun | SwarmClawExecution,
     status: AgentTaskStatus,
   ) {
     await this.orm.em.getConnection().execute(
@@ -327,11 +368,11 @@ export class AgentTasksService {
            updated_at = current_timestamp
        where id = ?`,
       [
-        run.runId,
+        this.runId(run),
         status,
         run.output ?? null,
         run.error ?? null,
-        run.usage ? JSON.stringify(run.usage) : null,
+        this.usage(run) ? JSON.stringify(this.usage(run)) : null,
         this.isTerminal(status),
         taskId,
       ],
@@ -340,7 +381,7 @@ export class AgentTasksService {
 
   private shouldPersistRun(
     task: AgentTaskRecord,
-    run: AgentRun,
+    run: AgentRun | SwarmClawExecution,
     status: AgentTaskStatus,
   ) {
     return (
@@ -369,6 +410,34 @@ export class AgentTasksService {
       );
     }
     return value as AgentTaskStatus;
+  }
+
+  private async getExecutorRun(
+    task: AgentTaskRecord,
+  ): Promise<AgentRun | SwarmClawExecution> {
+    if (task.executorType === 'swarmclaw') {
+      return this.swarmClawService.getExecution(task.agentRunId as string);
+    }
+    return this.agentService.getRun(task.agentRunId as string);
+  }
+
+  private async stopExecutorRun(
+    task: AgentTaskRecord,
+  ): Promise<AgentRun | SwarmClawExecution> {
+    if (task.executorType === 'swarmclaw') {
+      return this.swarmClawService.stopExecution(task.agentRunId as string);
+    }
+    return this.agentService.stopRun(task.agentRunId as string);
+  }
+
+  private runId(run: AgentRun | SwarmClawExecution): string {
+    return 'runId' in run ? run.runId : run.executionId;
+  }
+
+  private usage(
+    run: AgentRun | SwarmClawExecution,
+  ): Record<string, unknown> | undefined {
+    return 'usage' in run ? run.usage : undefined;
   }
 
   private isTerminal(status: AgentTaskStatus) {
