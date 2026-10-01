@@ -14,6 +14,7 @@ import { DesktopModule } from './modules/desktop/desktop.module';
 import { HealthModule } from './modules/health/health.module';
 import { LocalMaterialsModule } from './modules/local-materials/local-materials.module';
 import { OffboardingModule } from './modules/offboarding/offboarding.module';
+import { ProviderConnectionsModule } from './modules/provider-connections/provider-connections.module';
 import { SystemModule } from './modules/system/system.module';
 import { UsersModule } from './modules/users/users.module';
 import { WorkspaceModule } from './modules/workspace/workspace.module';
@@ -40,6 +41,7 @@ const databaseEnabled = process.env.DATABASE_ENABLED === 'true';
           DesktopModule,
           LocalMaterialsModule,
           AgentTasksModule,
+          ProviderConnectionsModule,
         ]
       : []),
   ],
