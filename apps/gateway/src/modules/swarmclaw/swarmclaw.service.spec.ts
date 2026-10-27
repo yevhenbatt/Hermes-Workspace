@@ -53,4 +53,59 @@ describe('SwarmClawService', () => {
       ServiceUnavailableException,
     );
   });
+
+  it('verifies the exact connection and returns only safe metadata', async () => {
+    process.env.HERMES_SWARMCLAW_BASE_URL = 'http://hermes-swarmclaw:3456';
+    process.env.HERMES_SWARMCLAW_SERVICE_KEY = 'private-key';
+    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        providerConnectionId: 'connection-1',
+        provider: 'codex',
+        authenticated: true,
+        method: 'codex_login_status',
+        token: 'must-not-return',
+      }),
+    } as Response);
+    await expect(
+      new SwarmClawService().verifyProviderConnection('connection-1'),
+    ).resolves.toEqual({
+      providerConnectionId: 'connection-1',
+      provider: 'codex',
+      authenticated: true,
+      method: 'codex_login_status',
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://hermes-swarmclaw:3456/api/internal/hermes/provider-connections/connection-1/verify',
+      expect.objectContaining({ method: 'POST', redirect: 'error' }),
+    );
+  });
+
+  it.each([
+    {
+      providerConnectionId: 'other',
+      provider: 'codex',
+      authenticated: true,
+      method: 'codex_login_status',
+    },
+    {
+      providerConnectionId: 'connection-1',
+      provider: 'codex',
+      authenticated: 'true',
+      method: 'codex_login_status',
+    },
+    null,
+  ])(
+    'rejects an invalid or mismatched verification response',
+    async (payload) => {
+      process.env.HERMES_SWARMCLAW_BASE_URL = 'http://hermes-swarmclaw:3456';
+      process.env.HERMES_SWARMCLAW_SERVICE_KEY = 'private-key';
+      jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValue({ ok: true, json: async () => payload } as Response);
+      await expect(
+        new SwarmClawService().verifyProviderConnection('connection-1'),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    },
+  );
 });

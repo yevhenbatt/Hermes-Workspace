@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { MikroORM } from '@mikro-orm/postgresql';
 import { randomUUID } from 'node:crypto';
+import { SwarmClawService } from '../swarmclaw/swarmclaw.service';
 
 import { CreateProviderConnectionDto } from './dto/create-provider-connection.dto';
 import { CreateProviderConnectionGrantDto } from './dto/create-provider-connection-grant.dto';
@@ -48,7 +49,80 @@ export interface ProviderConnectionView extends ProviderConnectionRow {
 
 @Injectable()
 export class ProviderConnectionsService {
-  constructor(private readonly orm: MikroORM) {}
+  constructor(
+    private readonly orm: MikroORM,
+    private readonly swarmClawService: SwarmClawService,
+  ) {}
+
+  async verifyConnection(userId: string, connectionId: string) {
+    const connection = await this.getOwnedConnection(userId, connectionId);
+    if (connection.status === 'revoked') {
+      throw new BadRequestException(
+        'A revoked provider connection cannot be activated',
+      );
+    }
+    if (connection.provider !== 'codex') {
+      throw new BadRequestException(
+        'Verification is currently supported only for Codex',
+      );
+    }
+
+    const verification =
+      await this.swarmClawService.verifyProviderConnection(connectionId);
+    const nextStatus = verification.authenticated ? 'active' : 'pending';
+    const [updated] = await this.query<{
+      id: string;
+      status: ProviderConnectionStatus;
+      previousStatus: ProviderConnectionStatus;
+    }>(
+      `with locked as materialized (
+         select pc.id, pc.status
+         from workspace.provider_connections pc
+         join auth.users u on u.id = pc.owner_user_id and u.is_active = true
+         where pc.id = ? and pc.owner_user_id = ? and pc.status in ('pending', 'active')
+         for update of pc
+       ), updated as (
+         update workspace.provider_connections pc
+         set status = ?, updated_at = current_timestamp
+         from locked where pc.id = locked.id
+         returning pc.id, pc.status, locked.status as previous_status
+       ), audited as (
+         insert into workspace.audit_events
+           (id, organization_id, actor_user_id, event_type, target_type, target_id, metadata)
+         select ?, null, ?,
+           case when ? = false then 'provider_connection.verification_failed'
+                when previous_status = 'pending' then 'provider_connection.activated'
+                else 'provider_connection.verified' end,
+           'provider_connection', id,
+           jsonb_build_object('provider', 'codex', 'verificationMethod', 'codex_login_status',
+             'authenticated', ?::boolean, 'fromStatus', previous_status, 'toStatus', status)
+         from updated returning target_id
+       )
+       select updated.id, updated.status, updated.previous_status as "previousStatus"
+       from updated join audited on audited.target_id = updated.id`,
+      [
+        connectionId,
+        userId,
+        nextStatus,
+        randomUUID(),
+        userId,
+        verification.authenticated,
+        verification.authenticated,
+      ],
+    );
+    if (!updated) {
+      throw new BadRequestException(
+        'Provider connection was revoked or changed during verification',
+      );
+    }
+    return {
+      id: updated.id,
+      status: updated.status,
+      authenticated: verification.authenticated,
+      verificationMethod: verification.method,
+      changed: updated.previousStatus !== updated.status,
+    };
+  }
 
   async createConnection(
     userId: string,
