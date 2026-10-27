@@ -3,7 +3,10 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
+  ParseUUIDPipe,
   Post,
   Req,
   UseGuards,
@@ -62,6 +65,26 @@ export class ProviderConnectionsController {
     return this.providerConnectionsService.createConnection(
       req.user.userId,
       dto,
+    );
+  }
+
+  @Post(':connectionId/verify')
+  @HttpCode(HttpStatus.OK)
+  @Version('1')
+  @ApiOperation({
+    summary: 'Verify the owner OAuth profile and update connection readiness',
+  })
+  @ApiOkResponse({
+    description:
+      'Server-verified login status only; no OAuth credentials are returned.',
+  })
+  verifyConnection(
+    @Req() req: AuthenticatedRequest,
+    @Param('connectionId', new ParseUUIDPipe()) connectionId: string,
+  ) {
+    return this.providerConnectionsService.verifyConnection(
+      req.user.userId,
+      connectionId,
     );
   }
 
